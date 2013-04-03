@@ -14,13 +14,9 @@ def auth(credential_location="~/.rackspace_cloud_credentials"):
     """
     Loads the pyrax credentials from ~/.rackspace_cloud_credentials
     :param credential_location: The location containing the credential ini
-    :return:
     """
     credentials = os.path.expanduser(credential_location)
     pyrax.set_credential_file(credentials)
-
-    #Creating cloudserver client
-    return pyrax.cloudservers
 
 
 def get_flavor_by_ram(cs, ram_size):
@@ -116,7 +112,8 @@ def main():
     image_uuid = "c195ef3b-9195-4474-b6f7-16e5bd86acd0"
 
     #Authorizing with cloud servers
-    cs = auth()
+    auth()
+    cs = pyrax.cloudservers
 
     #Creating server based on Defaults
     servers, passwords = create_servers(cs, num_servers=servers_to_create, server_base_name=server_name,
