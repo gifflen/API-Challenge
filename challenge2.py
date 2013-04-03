@@ -50,7 +50,7 @@ def select_server_from_list(cs):
 
     choice = get_int_input("Which server would you like to clone? (by number) ")
 
-    if 0 <= choice <= len(servers):
+    if 0 <= choice <= len(servers) - 1:
         return servers[choice]
     else:
         print choice
