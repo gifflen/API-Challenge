@@ -92,7 +92,7 @@ def get_network_status(cs, server_list, polling_time=3):
     return servers
 
 
-def print_server_info(server_list, passwords):
+def print_server_info_list(server_list, passwords):
     """
     Prints server information based on the list of servers given
     :param server_list: A list of server type objects
@@ -118,8 +118,6 @@ def main():
     #Authorizing with cloud servers
     cs = auth()
 
-
-
     #Creating server based on Defaults
     servers, passwords = create_servers(cs, num_servers=servers_to_create, server_base_name=server_name,
                                         image_uuid=image_uuid, flavor_id=flavor_id)
@@ -129,7 +127,7 @@ def main():
     servers = get_network_status(cs, servers)
 
     #display server information
-    print_server_info(servers, passwords)
+    print_server_info_list(servers, passwords)
 
 
 if __name__ == "__main__":
