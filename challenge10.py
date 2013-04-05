@@ -10,8 +10,10 @@ from __future__ import with_statement
 from urlparse import urlparse
 import pyrax
 import os
-import sys
 import re
+import time
+import sys
+
 
 __author__ = 'Bruce Stringer'
 
@@ -122,7 +124,7 @@ def create_servers(cloud_account, image_uuid="c195ef3b-9195-4474-b6f7-16e5bd86ac
 
         #Registering passwords in password dict. Storing the password with the UUID as the key.
         passwords[server.id] = server.adminPass
-    return servers, passwords
+    return servers
 
 
 def get_ssh_key():
@@ -164,8 +166,24 @@ def get_fqdn(tlds):
     return domain_parts, domain
 
 
-def main():
+def create_node(lb_client, address, port=80):
+    return lb_client.Node(address=address, port=port)
 
+
+def create_load_balancer(lb_client, lb_name, port=80, protocol="HTTP", nodes=None, virtaul_ips=None):
+    if not virtaul_ips:
+        virtaul_ips = []
+    if not nodes:
+        nodes = []
+
+    return lb_client.create(lb_name, port=port, protocol=protocol, nodes=nodes, virtual_ips=virtaul_ips)
+
+
+def create_vip(lb_client):
+    return lb_client.VirtualIP(type="PUBLIC")
+
+
+def main():
     auth()
 
     cs_client = pyrax.cloudservers
@@ -205,17 +223,42 @@ def main():
         '/root/.ssh/authorized_keys': key_contents
     }
     #create Servers with key
-    servers = create_servers(cs_client, server_base_name=fqdn, files=files)
+    servers = create_servers(cs_client, server_base_name=fqdn, files=files, num_servers=2)
 
     #Wait for servers' networks to be created
+    print "Waiting for servers networks to be provisioned."
     network_configured = False
     while not network_configured:
-
+        network_configured = True
+        for server in servers:
+            server.get()
+            #print "Server Name: %s\t Id: %s\tStatus: %s\tProgress: %d" % (
+            #   server.name, server.id, server.status, server._info['progress'])
+            if 'private' not in server.networks:
+                network_configured = False
+            if server.status == "ERROR":
+                print "Server failed to build, Exiting"
+                sys.exit(2)
+        if not network_configured:
+            sys.stdout.write('.')
+            time.sleep(30)
 
     #create nodes
+    nodes = []
+    for server in servers:
+        print server.networks['private'][0]
+        nodes.append(create_node(lb_client, server.networks['private'][0]))
 
     #create lb with nodes
+    vip = create_vip(lb_client)
 
+    lb = create_load_balancer(lb_client, fqdn, nodes=nodes, virtaul_ips=[vip])
+
+    if not pyrax.utils.wait_until(lb, 'status', 'ACTIVE', interval=30, verbose=True):
+        print "Creating the lb failed"
+        sys.exit(3)
+
+    print lb
     #setup LB monitor with custom error page
 
     #create dns record from lb VIP at FQDN
