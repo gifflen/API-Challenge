@@ -183,6 +183,45 @@ def create_vip(lb_client):
     return lb_client.VirtualIP(type="PUBLIC")
 
 
+def add_record(domain, fqdn, record_type, data, priority="", ttl=300):
+    record_types = ["A", "CNAME", "MX", "NS", "SRV", "TXT"]
+    record_type = str(record_type).upper()
+    if record_type not in record_types:
+        raise ValueError("Not a valid record type.")
+    elif ttl < 300 or ttl > 86400:
+        raise ValueError("Invalid TTYL. Should be between 300 and 86400")
+
+    record = {
+        'type': record_type,
+        'name': fqdn,
+        'data': data,
+        'ttl': ttl,
+        }
+
+    if record_type == "MX":
+        if priority < 0 or priority > 65535:
+            raise ValueError("Invalid priority. Should be between 0 and 65535")
+        record['priority'] = priority
+
+    try:
+        generated_record = domain.add_records(record)
+    except (pyrax.exc.BadRequest,  pyrax.exc.DomainRecordAdditionFailed) as e:
+        raise
+
+    return generated_record
+
+
+def create_cloudfiles_container(cf_client, name):
+    container = cf_client.create_container(name)
+    print "Created container: " + name
+    return container
+
+
+def create_object(container, content, index_name="index.html", content_type='text/html'):
+    index = container.client.store_object(container, index_name, content, content_type=content_type)
+    return index
+
+
 def main():
     auth()
 
@@ -232,8 +271,6 @@ def main():
         network_configured = True
         for server in servers:
             server.get()
-            #print "Server Name: %s\t Id: %s\tStatus: %s\tProgress: %d" % (
-            #   server.name, server.id, server.status, server._info['progress'])
             if 'private' not in server.networks:
                 network_configured = False
             if server.status == "ERROR":
@@ -259,12 +296,25 @@ def main():
         sys.exit(3)
 
     print lb
+
     #setup LB monitor with custom error page
+    lb.add_health_monitor(type="CONNECT", delay=10, timeout=10,
+                          attemptsBeforeDeactivation=3)
+
+    error_page = get_str_input("Please enter the text to display on your customer error page: ")
+
+    lb.set_error_page(error_page)
 
     #create dns record from lb VIP at FQDN
-
+    generate_record = add_record(domain, fqdn=fqdn, record_type="A", data=lb.virtual_ips[0].address)
+    print "Record created for %s at %s" % (fqdn, lb.virtual_ips[0].address)
     #Write the error page html to a file in cloud files for backup.
 
+    container_name = get_str_input("Please enter the name for your new container: ")
+    container = create_cloudfiles_container(cf_client, container_name)
+    create_object(container, error_page, index_name="error.html")
+
+    print "Container created and error page backed up."
 
 if __name__ == "__main__":
     main()
